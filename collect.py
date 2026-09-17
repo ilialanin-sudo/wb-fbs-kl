@@ -519,7 +519,7 @@ def main():
         log(f"  [{title}] реклама")
         save(f"adv_{key}", pull_adv(tok))
 
-    asm_days = int(os.environ.get("ASSEMBLY_DAYS", "10"))
+    asm_days = int(os.environ.get("ASSEMBLY_DAYS", "30"))
     for key, title, tok in CABS:
         log(f"  [{title}] сборка и отгрузка")
         try:

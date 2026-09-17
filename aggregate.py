@@ -1129,6 +1129,140 @@ if ASM:
     asm_total["days"] = [dict(date=d, **{f: round(v, 2) for f, v in x.items()})
                          for d, x in sorted(dd.items())]
 
+# =============================================================== этапы FBS
+# Воронка по этапам: где физически находятся заказы периода и сколько это в
+# штуках, в деньгах (цена продавца до СПП) и в себестоимости. Источник —
+# раздел сборочных заданий: только там виден текущий статус каждого заказа.
+STG_CUM = [("ordered", "Заказано"), ("taken", "Взято в работу"),
+           ("shipped", "Отгружено"), ("reached", "Доехало до ПВЗ"),
+           ("sold", "Выкуплено")]
+STG_STATE = [("assembling", "На сборке"), ("in_way", "В пути"),
+             ("at_pvz", "Ждёт на ПВЗ"), ("sold", "Выкуплено"),
+             ("refused", "Отказ покупателя"), ("cancel", "Отменено до отгрузки"),
+             ("defect", "Брак")]
+STG_PERIODS = [(k, lb, s, e) for k, lb, s, e, _ in PERIODS]
+
+
+def mp_cost(o):
+    return (cost_by_nm.get(o.get("nmId"))
+            or cost_by_art.get(str(o.get("article") or "").strip()))
+
+
+def stage_rows(cab):
+    """Плоский список заданий кабинета с проставленным этапом."""
+    mp = load(f"mp_{cab}")
+    if not mp:
+        return []
+    closed = {s["id"] for s in (mp.get("supplies") or [])
+              if s.get("done") and s.get("closedAt")}
+    rows = []
+    for o in (mp.get("orders") or []):
+        day = (o.get("createdAt") or "")[:10]
+        if not day:
+            continue
+        ship = o.get("supplyId") in closed
+        wb = o.get("wbStatus")
+        sup = o.get("supplierStatus")
+        if sup == "cancel" or (wb in CANCEL_WB and not ship):
+            state = "cancel"
+        elif wb == "defect":
+            state = "defect"
+        elif wb in CANCEL_WB:
+            state = "refused"
+        elif wb == "sold":
+            state = "sold"
+        elif wb == "ready_for_pickup":
+            state = "at_pvz"
+        elif ship:
+            state = "in_way"
+        else:
+            state = "assembling"
+        rows.append(dict(
+            day=day, state=state,
+            art=str(o.get("article") or "").strip() or "без артикула",
+            nmId=o.get("nmId"),
+            rub=float(o.get("price") or 0),
+            cost=mp_cost(o),
+            taken=sup in ("confirm", "complete"),
+            shipped=ship,
+            reached=state in ("at_pvz", "sold", "refused", "defect"),
+            sold=state == "sold"))
+    return rows
+
+
+def _acc():
+    return dict(qty=0, rub=0.0, cost=0.0, cost_qty=0)
+
+
+def _add(a, r):
+    a["qty"] += 1
+    a["rub"] += r["rub"]
+    if r["cost"]:
+        a["cost"] += r["cost"]
+        a["cost_qty"] += 1
+
+
+def _fin(a, avg):
+    """Артикулам без себестоимости подставляем среднюю по покрытым."""
+    miss = a["qty"] - a["cost_qty"]
+    cost = a["cost"] + (avg * miss if avg and miss else 0)
+    return dict(qty=a["qty"], rub=round(a["rub"], 2),
+                cost=round(cost, 2) if (a["cost_qty"] or avg) else None,
+                cost_known=a["cost_qty"])
+
+
+def stage_pack(rows):
+    """Одна свёртка: воронка, снимок состояний и разрез по артикулам."""
+    if not rows:
+        return None
+    known = [r["cost"] for r in rows if r["cost"]]
+    avg = sum(known) / len(known) if known else None
+
+    cum, st = {k: _acc() for k, _ in STG_CUM}, {k: _acc() for k, _ in STG_STATE}
+    per_art = collections.defaultdict(
+        lambda: dict(cum={k: _acc() for k, _ in STG_CUM},
+                     st={k: _acc() for k, _ in STG_STATE}, nmId=None, cost=None))
+    for r in rows:
+        a = per_art[r["art"]]
+        a["nmId"] = a["nmId"] or r["nmId"]
+        a["cost"] = a["cost"] or r["cost"]
+        for key in ("ordered", "taken", "shipped", "reached", "sold"):
+            if key == "ordered" or r.get(key):
+                _add(cum[key], r)
+                _add(a["cum"][key], r)
+        _add(st[r["state"]], r)
+        _add(a["st"][r["state"]], r)
+
+    arts = []
+    for art, a in per_art.items():
+        arts.append(dict(art=art, nmId=a["nmId"], unit_cost=a["cost"],
+                         cum={k: _fin(a["cum"][k], avg) for k, _ in STG_CUM},
+                         st={k: _fin(a["st"][k], avg) for k, _ in STG_STATE}))
+    arts.sort(key=lambda x: -x["cum"]["ordered"]["rub"])
+    cover = (sum(1 for r in rows if r["cost"]) / len(rows)) if rows else 0
+    return dict(
+        funnel=[dict(key=k, label=lb, **_fin(cum[k], avg)) for k, lb in STG_CUM],
+        state=[dict(key=k, label=lb, **_fin(st[k], avg)) for k, lb in STG_STATE],
+        arts=arts, cost_cover=round(cover, 4), avg_cost=round(avg, 2) if avg else None)
+
+
+STG_ROWS = {c: stage_rows(c) for c, _ in CABS if c in res}
+stages, stages_total = {}, {}
+for c, rws in STG_ROWS.items():
+    stages[c] = {}
+    for k, lb, s, e in STG_PERIODS:
+        lo, hi = s.isoformat(), e.isoformat()
+        stages[c][k] = stage_pack([r for r in rws if lo <= r["day"] <= hi])
+all_rows = [r for rws in STG_ROWS.values() for r in rws]
+for k, lb, s, e in STG_PERIODS:
+    lo, hi = s.isoformat(), e.isoformat()
+    stages_total[k] = stage_pack([r for r in all_rows if lo <= r["day"] <= hi])
+stg_days = sorted({r["day"] for r in all_rows})
+stage_meta = dict(cum=[dict(key=k, label=lb) for k, lb in STG_CUM],
+                  state=[dict(key=k, label=lb) for k, lb in STG_STATE],
+                  first_day=stg_days[0] if stg_days else None,
+                  last_day=stg_days[-1] if stg_days else None)
+
 out = dict(
     generated_at=NOW.isoformat(timespec="seconds"),
     generated_human=NOW.strftime("%d.%m.%Y %H:%M"),
@@ -1155,6 +1289,9 @@ out = dict(
     daily={c: res[c]["daily"] for c in res},
     adv_day={c: res[c]["adv_day"] for c in res},
     meta={c: dict(first_order=res[c]["first_order"], warehouses=res[c]["warehouses"]) for c in res},
+    stages=stages,
+    stages_total=stages_total,
+    stage_meta=stage_meta,
     has_cost=bool(cost_by_nm or cost_by_art),
     cost_filled=len(cost_by_nm) or len(cost_by_art),
 )

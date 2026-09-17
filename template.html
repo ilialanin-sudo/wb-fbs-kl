@@ -342,6 +342,46 @@ details .body code{background:color-mix(in oklab,var(--ink) 7%,transparent);padd
 
   </div><!-- /fbs-body -->
 
+  <div id="stg-body" style="display:none">
+    <div class="bar" style="margin-bottom:12px">
+      <div class="seg" id="stg-unit"></div>
+      <div class="spacer"></div>
+      <span class="pill" id="stg-cover"></span>
+    </div>
+
+    <div class="card">
+      <div class="sec-h">
+        <div><h2>Воронка этапов</h2>
+        <p class="tiny">накопительно: сколько из заказов периода дошло до каждого шага</p></div>
+        <span class="pill" id="stg-win"></span>
+      </div>
+      <div class="scroll"><table><thead><tr>
+        <th>Этап</th><th>Штук</th><th>Цена продавца, ₽</th><th>Себестоимость, ₽</th><th>Доля от заказанного</th>
+      </tr></thead><tbody id="stg-funnel"></tbody></table></div>
+      <p class="tiny" style="margin-top:10px">Каждая строка — это одни и те же заказы периода на разных шагах пути, поэтому числа только убывают. «Цена продавца» — сумма по цене до скидки маркетплейса. Себестоимость берётся из секрета <code>COST_JSON</code>; артикулам без своей цифры подставляется средняя по покрытым.</p>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <div class="sec-h">
+        <div><h2>Где заказы сейчас</h2>
+        <p class="tiny">взаимоисключающие состояния на момент обновления, в сумме дают заказано</p></div>
+      </div>
+      <div class="scroll"><table><thead><tr>
+        <th>Состояние</th><th>Штук</th><th>Цена продавца, ₽</th><th>Себестоимость, ₽</th><th>Доля</th>
+      </tr></thead><tbody id="stg-state"></tbody></table></div>
+      <p class="tiny" style="margin-top:10px">Отмена до отгрузки — заказ не успел уехать в поставке. Отказ покупателя — заказ уехал, но его не выкупили на пункте выдачи. Свежие заказы сидят в «на сборке» и «в пути», поэтому у сегодняшнего дня выкуп почти нулевой: заказу нужно 7–14 дней, чтобы доехать.</p>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <div class="sec-h">
+        <div><h2>По артикулам</h2>
+        <p class="tiny" id="stg-art-note"></p></div>
+      </div>
+      <div class="scroll tbl-tall"><table><thead><tr id="stg-art-h"></tr></thead>
+        <tbody id="stg-art"></tbody><tfoot id="stg-art-f"></tfoot></table></div>
+    </div>
+  </div><!-- /stg-body -->
+
   <div id="fbw-body" style="display:none">
     <div class="card">
       <div class="sec-h">
@@ -522,6 +562,7 @@ const pmeta = () => RANGE
 $("#ttl").textContent = (D.brand ? D.brand+" · " : "") + "FBS · заказы и юнит-экономика";
 // подпись под заголовком зависит от того, сколько кабинетов в проекте
 const NCAB = (D.cabinets||[]).length;
+const SUB_STG = "Заказы FBS по этапам пути: штуки, деньги по цене продавца и себестоимость — в тотале и по каждому артикулу.";
 const SUB_FBS = (NCAB>1 ? NCAB+" кабинета одного бренда. " : "")
   + "В расчёт идут только заказы со склада продавца — модель FBW исключена целиком.";
 const SUB_FBW = "Отдельный разрез по складу WB: сколько идёт доставка и сколько заказов выкупают. В юнит-экономику FBS ничего отсюда не попадает.";
@@ -555,6 +596,7 @@ if(!localStorage.getItem("wbtheme") && matchMedia("(prefers-color-scheme: dark)"
 
 /* --------------------------------------------------------------- сегменты */
 const TABS = [{key:"fbs", title:"FBS", note:"заказы и экономика"}]
+  .concat((D.stage_meta && D.stages_total) ? [{key:"stg", title:"Этапы", note:"воронка и суммы"}] : [])
   .concat((D.fbw && Object.keys(D.fbw).length) ? [{key:"fbw", title:"FBW", note:"доставка и выкуп"}] : []);
 let TAB = "fbs";
 $("#tabs").innerHTML = TABS.map(t=>
@@ -1207,17 +1249,20 @@ function render(){
   document.querySelectorAll("#tabs button").forEach(b=>b.setAttribute("aria-pressed", b.dataset.tab===TAB));
   document.querySelectorAll("#cabs button").forEach(b=>b.setAttribute("aria-pressed", b.dataset.cab===CAB));
   document.querySelectorAll("#pers button").forEach(b=>b.setAttribute("aria-pressed", b.dataset.per===PER));
-  const isFbw = TAB==="fbw";
+  const isFbw = TAB==="fbw", isStg = TAB==="stg";
   // FBW — отдельная вкладка: периоды и оговорка «только FBS» к ней не относятся
-  $("#fbs-body").style.display = isFbw ? "none" : "";
+  $("#fbs-body").style.display = (isFbw||isStg) ? "none" : "";
   $("#fbw-body").style.display = isFbw ? "" : "none";
+  $("#stg-body").style.display = isStg ? "" : "none";
   $("#pers").style.display = "";
   $("#fbsonly").style.display = isFbw ? "none" : "";
   $("#ttl").textContent = isFbw ? "FBW · путь заказа и сроки доставки"
-                                : "FBS · заказы и юнит-экономика";
-  $("#sub").textContent = isFbw ? SUB_FBW : SUB_FBS;
-  $("#rangebox").style.display = PER==="range" ? "inline-flex" : "none";
+                : isStg ? "FBS · суммы по этапам"
+                        : "FBS · заказы и юнит-экономика";
+  $("#sub").textContent = isFbw ? SUB_FBW : isStg ? SUB_STG : SUB_FBS;
+  $("#rangebox").style.display = (PER==="range" && !isStg) ? "inline-flex" : "none";
   if(isFbw){ fbwRender(); return; }
+  if(isStg){ stgRender(); return; }
   flags(); kpis(); assembly(); retRender(); waterfall(); charts(); cohorts(); skus();
 }
 
@@ -1500,6 +1545,91 @@ function fbwRender(){
     $("#fbw-ch").style.display="none";
     $("#fbw-chnote").textContent = "В этом периоде заказы ещё слишком свежие, чтобы строить кривую созревания.";
   }
+}
+
+
+/* ------------------------------------------------------------ этапы FBS */
+/* Один источник — раздел сборочных заданий: только там у каждого заказа есть
+   текущий статус. Поэтому вкладка живёт в окне этого раздела, а не 28 дней. */
+let STG_UNIT = "qty";
+const STG_UNITS = [{k:"qty", t:"Штуки"}, {k:"rub", t:"Рубли"}, {k:"cost", t:"Себестоимость"}];
+const STG_COLS = [
+  {k:"ordered", src:"cum",   t:"Заказано"},
+  {k:"shipped", src:"cum",   t:"Отгружено"},
+  {k:"assembling", src:"st", t:"На сборке"},
+  {k:"in_way", src:"st",     t:"В пути"},
+  {k:"at_pvz", src:"st",     t:"Ждёт на ПВЗ"},
+  {k:"sold", src:"st",       t:"Выкуплено"},
+  {k:"refused", src:"st",    t:"Отказ"},
+  {k:"cancel", src:"st",     t:"Отменено"},
+  {k:"defect", src:"st",     t:"Брак"},
+];
+
+$("#stg-unit").innerHTML = STG_UNITS.map(u=>
+  `<button data-unit="${u.k}" aria-pressed="${u.k===STG_UNIT}">${u.t}</button>`).join("");
+$("#stg-unit").onclick = e => { const b=e.target.closest("button"); if(!b)return;
+  STG_UNIT=b.dataset.unit; stgRender(); };
+
+function stgPack(){
+  const per = PER==="range" ? "d28" : PER;
+  return (CAB==="total" ? (D.stages_total||{})[per] : ((D.stages||{})[CAB]||{})[per]) || null;
+}
+
+function stgCell(v){
+  if(!v) return "—";
+  if(STG_UNIT==="qty") return fmt(v.qty);
+  const x = STG_UNIT==="rub" ? v.rub : v.cost;
+  return x==null ? "—" : money(x);
+}
+
+function stgRender(){
+  document.querySelectorAll("#stg-unit button").forEach(b=>
+    b.setAttribute("aria-pressed", b.dataset.unit===STG_UNIT));
+  const P = stgPack();
+  const M = D.stage_meta || {};
+  const win = M.first_day && M.last_day
+    ? `окно раздела сборки: ${dmy(M.first_day)} — ${dmy(M.last_day)}` : "";
+  $("#stg-win").textContent = (PER==="range" ? "свой период здесь не считается, показаны 28 дней · " : "") + win;
+  $("#stg-cover").textContent = P
+    ? `себестоимость у ${pct(P.cost_cover,0)} заказов` + (P.avg_cost ? ` · средняя ${money(P.avg_cost)}` : "")
+    : "";
+
+  if(!P){
+    $("#stg-funnel").innerHTML = `<tr><td colspan="5" class="tiny">За этот период заданий нет. Раздел сборки хранит ограниченное окно — ${win||"см. выше"}.</td></tr>`;
+    $("#stg-state").innerHTML = ""; $("#stg-art").innerHTML = ""; $("#stg-art-h").innerHTML = "";
+    $("#stg-art-f").innerHTML = "";
+    $("#stg-art-note").textContent = "";
+    return;
+  }
+
+  const base = P.funnel[0] ? P.funnel[0].qty : 0;
+  $("#stg-funnel").innerHTML = P.funnel.map((f,i)=>{
+    const prev = i ? P.funnel[i-1] : null;
+    const drop = prev && prev.qty ? (prev.qty - f.qty) : 0;
+    return `<tr><td><b>${f.label}</b>${drop ? `<br><small class="muted">−${fmt(drop)} шт к прошлому шагу</small>` : ""}</td>
+      <td>${fmt(f.qty)}</td><td>${money(f.rub)}</td><td>${f.cost==null?"—":money(f.cost)}</td>
+      <td>${base ? pct(f.qty/base,1) : "—"}</td></tr>`;
+  }).join("");
+
+  $("#stg-state").innerHTML = P.state.map(s=>
+    `<tr><td>${s.label}</td><td>${fmt(s.qty)}</td><td>${money(s.rub)}</td>
+      <td>${s.cost==null?"—":money(s.cost)}</td>
+      <td>${base ? pct(s.qty/base,1) : "—"}</td></tr>`).join("");
+
+  $("#stg-art-h").innerHTML = `<th>Артикул</th><th class="hide-s">Себес / шт</th>`
+    + STG_COLS.map(c=>`<th>${c.t}</th>`).join("");
+  const val = (a,c) => (c.src==="cum" ? a.cum : a.st)[c.k];
+  $("#stg-art").innerHTML = P.arts.map(a=>
+    `<tr><td><b>${a.art}</b>${a.nmId?`<br><small class="muted">${a.nmId}</small>`:""}</td>
+      <td class="hide-s">${a.unit_cost==null?"—":money(a.unit_cost)}</td>`
+    + STG_COLS.map(c=>`<td>${stgCell(val(a,c))}</td>`).join("") + `</tr>`).join("");
+
+  const tot = c => (c.src==="cum" ? P.funnel.find(f=>f.key===c.k) : P.state.find(s=>s.key===c.k));
+  $("#stg-art-f").innerHTML = `<tr><td><b>Итого</b></td><td class="hide-s"></td>`
+    + STG_COLS.map(c=>`<td><b>${stgCell(tot(c))}</b></td>`).join("") + `</tr>`;
+
+  const unitName = STG_UNIT==="qty" ? "штуках" : (STG_UNIT==="rub" ? "рублях по цене продавца" : "рублях себестоимости");
+  $("#stg-art-note").textContent = `${P.arts.length} артикулов, числа в ${unitName}. Сортировка по сумме заказов. Переключатель наверху меняет единицу во всей таблице.`;
 }
 
 function drawAll(){ charts(); assembly(); }
