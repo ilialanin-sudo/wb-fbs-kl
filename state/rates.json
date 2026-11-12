@@ -49,27 +49,27 @@
   "logistics_back_per_order": 39.28,
   "handling_per_order": 0.0,
   "penalty_per_order": 0.0,
-  "buyout_of_raw": 0.375,
+  "buyout_of_raw": 0.381,
   "source": "FBS",
   "cohort_whole": {
    "tag": "кабинет целиком",
    "window": "2026-10-18—2026-10-31",
-   "orders_raw": 959,
+   "orders_raw": 961,
    "covered": 856,
-   "coverage": 0.893,
-   "bought": 469,
-   "buyout_of_raw": 0.4891,
+   "coverage": 0.891,
+   "bought": 473,
+   "buyout_of_raw": 0.4922,
    "payout_share": 0.5502,
    "spp_share": 0.3758,
-   "logistics_per_order": 122.64,
-   "logistics_fwd_per_order": 92.41,
-   "logistics_back_per_order": 30.23,
+   "logistics_per_order": 122.38,
+   "logistics_fwd_per_order": 92.21,
+   "logistics_back_per_order": 30.17,
    "logistics_back_share": 0.2465,
-   "events_per_order": 1.333,
+   "events_per_order": 1.33,
    "deliveries": 856,
    "returns": 422,
    "handling_per_order": 0.0,
-   "penalty_per_order": 2.73,
+   "penalty_per_order": 2.72,
    "storage_per_order": 0.0
   },
   "cohort_fbs": {
@@ -78,8 +78,8 @@
    "orders_raw": 168,
    "covered": 153,
    "coverage": 0.911,
-   "bought": 63,
-   "buyout_of_raw": 0.375,
+   "bought": 64,
+   "buyout_of_raw": 0.381,
    "payout_share": 0.5235,
    "spp_share": 0.3914,
    "logistics_per_order": 155.68,
@@ -99,8 +99,8 @@
    "orders_raw": 324,
    "covered": 307,
    "coverage": 0.948,
-   "bought": 106,
-   "buyout_of_raw": 0.3272,
+   "bought": 107,
+   "buyout_of_raw": 0.3302,
    "payout_share": 0.5326,
    "spp_share": 0.3874,
    "logistics_per_order": 133.59,
@@ -115,7 +115,7 @@
    "storage_per_order": 0.0
   },
   "covered_to": "2026-11-08",
-  "updated_at": "2026-11-12T01:51:02+03:00"
+  "updated_at": "2026-11-12T23:53:35+03:00"
  },
  "les": {
   "return_lag": {
@@ -175,8 +175,8 @@
    "orders_raw": 758,
    "covered": 638,
    "coverage": 0.842,
-   "bought": 363,
-   "buyout_of_raw": 0.4789,
+   "bought": 364,
+   "buyout_of_raw": 0.4802,
    "payout_share": 0.5374,
    "spp_share": 0.299,
    "logistics_per_order": 255.5,
@@ -233,6 +233,6 @@
    "storage_per_order": 0.0
   },
   "covered_to": "2026-11-08",
-  "updated_at": "2026-11-12T01:51:02+03:00"
+  "updated_at": "2026-11-12T23:53:35+03:00"
  }
 }
